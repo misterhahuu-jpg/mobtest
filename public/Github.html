@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>GitPush Mobile — Organize & Push</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    /* Fallback styles in case mobile file viewer blocks Tailwind CDN */
+    body { background-color: #020617; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; margin: 0; padding-bottom: 60px; -webkit-tap-highlight-color: transparent; }
+    button { cursor: pointer; touch-action: manipulation; }
+    .panel-hidden { display: none !important; }
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen pb-16 font-sans">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-lg">🚀</div>
+      <div>
+        <h1 class="font-bold text-base leading-tight">GitPush Mobile</h1>
+        <p class="text-xs text-slate-400">Organize & Push in 1 Tap</p>
+      </div>
+    </div>
+    <button id="settingsBtn" type="button" onclick="toggleSettings()" class="text-xs bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 px-3.5 py-2 rounded-xl font-semibold active:scale-95 transition">
+      ⚙️ Keys
+    </button>
+  </header>
+
+  <main class="max-w-lg mx-auto p-4 space-y-4">
+
+    <!-- Step 1: Credentials Panel (Open by default until token is saved) -->
+    <section id="settingsPanel" class="bg-slate-900 border border-indigo-500/40 rounded-2xl p-4 space-y-3 shadow-lg">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-wider">1. API Credentials</h2>
+        <button type="button" onclick="toggleSettings()" class="text-xs text-slate-400 hover:text-white px-2 py-1">✕ Close</button>
+      </div>
+      
+      <div>
+        <label class="block text-xs text-slate-300 mb-1">GitHub Personal Access Token (Required) *</label>
+        <input id="ghToken" type="password" placeholder="ghp_... or github_pat_..." 
+          class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        <p class="text-[11px] text-slate-400 mt-1">Needs <code class="text-indigo-300">repo</code> (Classic) or <code class="text-indigo-300">Contents: Read & Write</code> (Fine-grained).</p>
+      </div>
+
+      <div>
+        <label class="block text-xs text-slate-300 mb-1">Gemini API Key (Optional — for AI Smart Sort)</label>
+        <input id="geminiKey" type="password" placeholder="AIzaSy..." 
+          class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+      </div>
+
+      <button type="button" onclick="saveCredentials()" class="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] transition font-semibold py-2.5 rounded-xl text-sm text-white">
+        Save & Connect GitHub
+      </button>
+    </section>
+
+    <!-- Step 2: Target Repository -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-wider">Target Repository</h2>
+        <button type="button" onclick="fetchRepos()" class="text-xs text-indigo-400 hover:underline px-2 py-1">↻ Refresh</button>
+      </div>
+
+      <div id="userStatus" class="text-xs text-amber-400">Enter your GitHub Token in ⚙️ Keys above to connect.</div>
+
+      <select id="repoSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+        <option value="">-- Connect GitHub first --</option>
+      </select>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">Branch</label>
+          <input id="branchInput" type="text" value="main" 
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div class="flex items-end">
+          <button type="button" onclick="toggleNewRepoModal()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 py-2 rounded-xl text-xs font-medium text-white">
+            + Create New Repo
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Create Repo Box -->
+      <div id="newRepoBox" class="panel-hidden pt-2 border-t border-slate-800 space-y-2">
+        <input id="newRepoName" type="text" placeholder="new-repo-name" 
+          class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" />
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input id="newRepoPrivate" type="checkbox" class="rounded bg-slate-950 border-slate-700" />
+            Private Repository
+          </label>
+          <button type="button" onclick="createNewRepo()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-xs font-semibold text-white">
+            Create Now
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Upload Files or ZIP -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-wider">Upload Files or .ZIP</h2>
+        <button type="button" onclick="clearFiles()" class="text-xs text-rose-400 hover:underline">Clear All</button>
+      </div>
+
+      <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-950/60 rounded-2xl p-6 cursor-pointer transition text-center">
+        <span class="text-3xl mb-1">📂</span>
+        <span class="text-sm font-semibold text-slate-200">Tap to Select Files or .ZIP</span>
+        <span class="text-xs text-slate-400 mt-0.5">Extracts ZIPs & organizes folders automatically</span>
+        <input id="fileInput" type="file" multiple class="panel-hidden" onchange="handleFileSelect(event)" />
+      </label>
+
+      <!-- Organizer Mode Controls -->
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button type="button" onclick="autoOrganizeRules()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 py-2.5 px-3 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-1.5">
+          <span>🗂️</span> Rule Sort
+        </button>
+        <button type="button" onclick="autoOrganizeAI()" id="aiSortBtn" class="bg-violet-700 hover:bg-violet-600 border border-violet-500/40 py-2.5 px-3 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-1.5">
+          <span>✨</span> Gemini AI Sort
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 4: Interactive File Tree Preview -->
+    <section id="previewSection" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 panel-hidden">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-wider">
+          Organized Structure (<span id="fileCount">0</span>)
+        </h2>
+        <span class="text-[11px] text-slate-400">Tap any path to edit</span>
+      </div>
+
+      <div id="fileList" class="space-y-2 max-h-72 overflow-y-auto custom-scroll pr-1"></div>
+    </section>
+
+    <!-- Step 5: Commit & Push -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-wider">Commit & Push</h2>
+      
+      <input id="commitMsg" type="text" placeholder="feat: upload and organize project files" 
+        class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+
+      <button id="pushBtn" type="button" onclick="pushToGitHub()" class="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] transition font-bold py-3.5 rounded-xl text-sm text-white shadow-lg flex items-center justify-center gap-2">
+        <span>🚀</span> Organize & Push to GitHub
+      </button>
+
+      <!-- Status Log -->
+      <div id="statusBox" class="panel-hidden rounded-xl p-3 text-xs font-mono whitespace-pre-wrap bg-slate-950 border border-slate-800 text-slate-300"></div>
+    </section>
+
+  </main>
+
+  <script>
+    // Safe storage wrapper so opening via file:// or content:// on Android/iOS never crashes
+    const memoryStore = {};
+    const safeStorage = {
+      get(key) {
+        try { return localStorage.getItem(key) || memoryStore[key] || ""; }
+        catch (e) { return memoryStore[key] || ""; }
+      },
+      set(key, val) {
+        memoryStore[key] = val;
+        try { localStorage.setItem(key, val); } catch (e) {}
+      }
+    };
+
+    let stagedFiles = [];
+
+    const ROOT_FILES = new Set([
+      "readme.md", "license", "license.md", ".gitignore", "package.json", 
+      "package-lock.json", "requirements.txt", "pyproject.toml", "dockerfile", 
+      "docker-compose.yml", "index.html", "vercel.json", "manifest.json", "makefile"
+    ]);
+
+    function toggleSettings() {
+      const panel = document.getElementById("settingsPanel");
+      panel.classList.toggle("panel-hidden");
+    }
+
+    function toggleNewRepoModal() {
+      const box = document.getElementById("newRepoBox");
+      box.classList.toggle("panel-hidden");
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const savedToken = safeStorage.get("gh_pat");
+      const savedGemini = safeStorage.get("gemini_key");
+      document.getElementById("ghToken").value = savedToken;
+      document.getElementById("geminiKey").value = savedGemini;
+
+      if (savedToken) {
+        document.getElementById("settingsPanel").classList.add("panel-hidden");
+        fetchRepos();
+      }
+    });
+
+    function logStatus(msg, isError = false) {
+      const box = document.getElementById("statusBox");
+      box.classList.remove("panel-hidden");
+      box.className = `rounded-xl p-3 text-xs font-mono whitespace-pre-wrap border ${
+        isError ? "bg-rose-950/40 border-rose-800 text-rose-200" : "bg-slate-950 border-slate-800 text-slate-300"
+      }`;
+      box.innerHTML = msg;
+    }
+
+    function saveCredentials() {
+      const token = document.getElementById("ghToken").value.trim();
+      const gemini = document.getElementById("geminiKey").value.trim();
+      if (!token) {
+        alert("Please paste your GitHub Personal Access Token first.");
+        return;
+      }
+      safeStorage.set("gh_pat", token);
+      safeStorage.set("gemini_key", gemini);
+      document.getElementById("settingsPanel").classList.add("panel-hidden");
+      fetchRepos();
+    }
+
+    async function githubApi(endpoint, options = {}) {
+      const token = safeStorage.get("gh_pat") || document.getElementById("ghToken").value.trim();
+      if (!token) throw new Error("Missing GitHub token. Tap ⚙️ Keys to add it.");
+      const res = await fetch(`https://api.github.com${endpoint}`, {
+        ...options,
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(options.headers || {})
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || `GitHub API Error (${res.status})`);
+      return data;
+    }
+
+    async function fetchRepos() {
+      const statusEl = document.getElementById("userStatus");
+      const selectEl = document.getElementById("repoSelect");
+      try {
+        statusEl.textContent = "⏳ Connecting to GitHub...";
+        const user = await githubApi("/user");
+        statusEl.innerHTML = `✅ Connected as <strong class="text-emerald-400">@${user.login}</strong>`;
+
+        const repos = await githubApi("/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator");
+        selectEl.innerHTML = repos.map(r => 
+          `<option value="${r.full_name}" data-branch="${r.default_branch || 'main'}">${r.full_name} ${r.private ? '🔒' : ''}</option>`
+        ).join("");
+
+        selectEl.onchange = () => {
+          const opt = selectEl.options[selectEl.selectedIndex];
+          if (opt && opt.dataset.branch) {
+            document.getElementById("branchInput").value = opt.dataset.branch;
+          }
+        };
+        if (selectEl.options.length > 0) selectEl.onchange();
+      } catch (err) {
+        statusEl.innerHTML = `<span class="text-rose-400">❌ ${err.message}</span>`;
+        document.getElementById("settingsPanel").classList.remove("panel-hidden");
+      }
+    }
+
+    async function createNewRepo() {
+      const name = document.getElementById("newRepoName").value.trim();
+      const isPrivate = document.getElementById("newRepoPrivate").checked;
+      if (!name) return alert("Enter a repository name.");
+
+      try {
+        logStatus(`Creating repository ${name}...`);
+        const repo = await githubApi("/user/repos", {
+          method: "POST",
+          body: JSON.stringify({
+            name,
+            private: isPrivate,
+            auto_init: true
+          })
+        });
+        document.getElementById("newRepoName").value = "";
+        document.getElementById("newRepoBox").classList.add("panel-hidden");
+        await fetchRepos();
+        document.getElementById("repoSelect").value = repo.full_name;
+        logStatus(`✅ Created ${repo.full_name}! Ready to push files.`);
+      } catch (err) {
+        logStatus(`❌ Failed to create repo: ${err.message}`, true);
+      }
+    }
+
+    function getOrganizedPath(rawFilename) {
+      const cleanName = rawFilename.replace(/^\/+/, "");
+      const baseName = cleanName.split("/").pop();
+      const lowerBase = baseName.toLowerCase();
+
+      if (ROOT_FILES.has(lowerBase)) return baseName;
+
+      const ext = lowerBase.includes(".") ? lowerBase.split(".").pop() : "";
+      const map = {
+        py: "src", js: "src", ts: "src", jsx: "src", tsx: "src",
+        java: "src", cpp: "src", c: "src", cs: "src", go: "src", rs: "src", php: "src", rb: "src",
+        css: "styles", scss: "styles", sass: "styles", html: "public",
+        png: "assets/images", jpg: "assets/images", jpeg: "assets/images",
+        gif: "assets/images", svg: "assets/images", webp: "assets/images", ico: "assets/images",
+        mp4: "assets/media", mp3: "assets/media", wav: "assets/media",
+        ttf: "assets/fonts", woff: "assets/fonts", woff2: "assets/fonts",
+        json: "config", yaml: "config", yml: "config", toml: "config", ini: "config", env: "config",
+        csv: "data", sql: "data", db: "data",
+        md: "docs", txt: "docs", pdf: "docs",
+        sh: "scripts", bat: "scripts", ps1: "scripts"
+      };
+
+      const folder = map[ext] || "misc";
+      return `${folder}/${baseName}`;
+    }
+
+    function arrayBufferToBase64(buffer) {
+      let binary = "";
+      const bytes = new Uint8Array(buffer);
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    async function handleFileSelect(event) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      for (const file of files) {
+        if (file.name.toLowerCase().endsWith(".zip") && typeof JSZip !== "undefined") {
+          logStatus(`📦 Extracting ${file.name}...`);
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.keys(zip.files);
+          for (const relPath of entries) {
+            const entry = zip.files[relPath];
+            if (entry.dir || relPath.includes("__MACOSX") || relPath.endsWith(".DS_Store")) continue;
+            const buf = await entry.async("arraybuffer");
+            const baseName = relPath.split("/").pop();
+            stagedFiles.push({
+              originalName: baseName,
+              targetPath: getOrganizedPath(baseName),
+              contentBase64: arrayBufferToBase64(buf),
+              size: buf.byteLength
+            });
+          }
+        } else {
+          const buf = await file.arrayBuffer();
+          stagedFiles.push({
+            originalName: file.name,
+            targetPath: getOrganizedPath(file.name),
+            contentBase64: arrayBufferToBase64(buf),
+            size: file.size
+          });
+        }
+      }
+
+      event.target.value = "";
+      renderFileList();
+      logStatus(`Loaded ${stagedFiles.length} file(s) and organized paths.`);
+    }
+
+    function autoOrganizeRules() {
+      if (!stagedFiles.length) return alert("Upload some files first!");
+      stagedFiles.forEach(f => {
+        f.targetPath = getOrganizedPath(f.originalName);
+      });
+      renderFileList();
+      logStatus("🗂️ Re-organized files using standard folder rules.");
+    }
+
+    async function autoOrganizeAI() {
+      if (!stagedFiles.length) return alert("Upload some files first!");
+      const geminiKey = safeStorage.get("gemini_key") || document.getElementById("geminiKey").value.trim();
+      if (!geminiKey) {
+        document.getElementById("settingsPanel").classList.remove("panel-hidden");
+        return alert("Enter your Gemini API Key in ⚙️ Keys to use AI Smart Sort.");
+      }
+
+      const btn = document.getElementById("aiSortBtn");
+      btn.disabled = true;
+      btn.textContent = "⏳ Thinking...";
+
+      try {
+        const fileNames = stagedFiles.map(f => f.originalName);
+        const prompt = `You are a senior software architect. Organize this list of uploaded filenames into a clean, professional GitHub repository folder structure. Keep root files like README.md, index.html, package.json, or requirements.txt at the root. Return ONLY valid JSON with this exact schema:
+{"files": {"original_filename": "clean/folder/path/original_filename"}, "commitMessage": "conventional commit message summarizing the upload"}
+Filenames: ${JSON.stringify(fileNames)}`;
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || "Gemini API request failed");
+
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const parsed = JSON.parse(rawText);
+
+        if (parsed.files) {
+          stagedFiles.forEach(f => {
+            if (parsed.files[f.originalName]) {
+              f.targetPath = parsed.files[f.originalName].replace(/^\/+/, "");
+            }
+          });
+        }
+        if (parsed.commitMessage) {
+          document.getElementById("commitMsg").value = parsed.commitMessage;
+        }
+        renderFileList();
+        logStatus("✨ Gemini AI organized your folder structure and wrote a commit message!");
+      } catch (err) {
+        logStatus(`❌ AI Sort Error: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "<span>✨</span> Gemini AI Sort";
+      }
+    }
+
+    function renderFileList() {
+      const section = document.getElementById("previewSection");
+      const list = document.getElementById("fileList");
+      const count = document.getElementById("fileCount");
+
+      if (!stagedFiles.length) {
+        section.classList.add("panel-hidden");
+        return;
+      }
+
+      section.classList.remove("panel-hidden");
+      count.textContent = stagedFiles.length;
+
+      list.innerHTML = stagedFiles.map((file, idx) => `
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="text-[11px] text-slate-400 truncate">Original: ${file.originalName} (${(file.size / 1024).toFixed(1)} KB)</div>
+            <input type="text" value="${file.targetPath}" 
+              onchange="updatePath(${idx}, this.value)"
+              class="w-full bg-transparent text-xs font-mono text-indigo-300 focus:outline-none focus:border-b focus:border-indigo-500 mt-0.5" />
+          </div>
+          <button type="button" onclick="removeFile(${idx})" class="text-slate-500 hover:text-rose-400 px-2 py-1 text-sm">✕</button>
+        </div>
+      `).join("");
+    }
+
+    function updatePath(index, newPath) {
+      stagedFiles[index].targetPath = newPath.trim().replace(/^\/+/, "");
+    }
+
+    function removeFile(index) {
+      stagedFiles.splice(index, 1);
+      renderFileList();
+    }
+
+    function clearFiles() {
+      stagedFiles = [];
+      renderFileList();
+      document.getElementById("statusBox").classList.add("panel-hidden");
+    }
+
+    async function pushToGitHub() {
+      const fullRepo = document.getElementById("repoSelect").value;
+      const branch = document.getElementById("branchInput").value.trim() || "main";
+      const commitMsg = document.getElementById("commitMsg").value.trim() || "feat: organize and upload files from mobile";
+
+      if (!fullRepo) return alert("Select or create a GitHub repository first.");
+      if (!stagedFiles.length) return alert("Select some files to upload first.");
+
+      const btn = document.getElementById("pushBtn");
+      btn.disabled = true;
+      btn.textContent = "⏳ Pushing to GitHub...";
+
+      try {
+        logStatus(`1/4 Checking ${fullRepo} (${branch})...`);
+
+        let latestCommitSha = null;
+        let baseTreeSha = null;
+
+        try {
+          const refData = await githubApi(`/repos/${fullRepo}/git/ref/heads/${branch}`);
+          latestCommitSha = refData.object.sha;
+          const commitData = await githubApi(`/repos/${fullRepo}/git/commits/${latestCommitSha}`);
+          baseTreeSha = commitData.tree.sha;
+        } catch (err) {
+          logStatus(`Branch '${branch}' not found or repo is empty. Initializing repository...`);
+          await githubApi(`/repos/${fullRepo}/contents/.gitkeep`, {
+            method: "PUT",
+            body: JSON.stringify({
+              message: "chore: initialize repository",
+              content: btoa(""),
+              branch: branch
+            })
+          });
+          const refData = await githubApi(`/repos/${fullRepo}/git/ref/heads/${branch}`);
+          latestCommitSha = refData.object.sha;
+          const commitData = await githubApi(`/repos/${fullRepo}/git/commits/${latestCommitSha}`);
+          baseTreeSha = commitData.tree.sha;
+        }
+
+        const treeItems = [];
+        for (let i = 0; i < stagedFiles.length; i++) {
+          const f = stagedFiles[i];
+          logStatus(`2/4 Uploading file (${i + 1}/${stagedFiles.length}): ${f.targetPath}...`);
+          const blob = await githubApi(`/repos/${fullRepo}/git/blobs`, {
+            method: "POST",
+            body: JSON.stringify({
+              content: f.contentBase64,
+              encoding: "base64"
+            })
+          });
+          treeItems.push({
+            path: f.targetPath,
+            mode: "100644",
+            type: "blob",
+            sha: blob.sha
+          });
+        }
+
+        logStatus(`3/4 Building organized directory tree...`);
+        const newTree = await githubApi(`/repos/${fullRepo}/git/trees`, {
+          method: "POST",
+          body: JSON.stringify({
+            base_tree: baseTreeSha,
+            tree: treeItems
+          })
+        });
+
+        logStatus(`4/4 Committing & pushing to ${branch}...`);
+        const newCommit = await githubApi(`/repos/${fullRepo}/git/commits`, {
+          method: "POST",
+          body: JSON.stringify({
+            message: commitMsg,
+            tree: newTree.sha,
+            parents: [latestCommitSha]
+          })
+        });
+
+        await githubApi(`/repos/${fullRepo}/git/refs/heads/${branch}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            sha: newCommit.sha,
+            force: false
+          })
+        });
+
+        const repoUrl = `https://github.com/${fullRepo}/tree/${branch}`;
+        logStatus(`✅ Successfully pushed ${stagedFiles.length} organized file(s)!\n\n🔗 <a href="${repoUrl}" target="_blank" class="underline text-emerald-400 font-bold">Open ${fullRepo} on GitHub →</a>`);
+        stagedFiles = [];
+        renderFileList();
+      } catch (err) {
+        logStatus(`❌ Push Error: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "<span>🚀</span> Organize & Push to GitHub";
+      }
+    }
+  </script>
+</body>
+</html>
