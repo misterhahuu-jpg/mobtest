@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  tg_id BIGINT UNIQUE NOT NULL,
+  username TEXT,
+  balance INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS task_claims (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  task_ref TEXT NOT NULL,
+  reward_amount INTEGER NOT NULL DEFAULT 10,
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, task_ref)
+);
